@@ -2,24 +2,35 @@
 
 import os
 import subprocess
-from datetime import datetime
-from github import Github
+from datetime import datetime, timezone
+from github import Github, Auth
 import json
 
 class GitHandler:
-    def __init__(self, repo_path, github_token=None):
+    def __init__(self, github_token=None):
         """
-        Initialize GitHandler with local repository path and GitHub token
-        :param repo_path: Path to local git repository
+        Initialize GitHandler with GitHub token
         :param github_token: GitHub Personal Access Token
         """
-        self.repo_path = repo_path
         self.github_token = github_token or os.environ.get('GITHUB_TOKEN')
         if not self.github_token:
             raise ValueError("GitHub token is required. Set GITHUB_TOKEN environment variable.")
         
-        # Initialize GitHub API client
-        self.github = Github(self.github_token)
+        # Initialize GitHub API client with modern authentication
+        auth = Auth.Token(self.github_token)
+        self.github = Github(auth=auth)
+        
+        # Get the project root directory (where .git is located)
+        self.repo_path = self._find_git_root()
+
+    def _find_git_root(self):
+        """Find the root directory of the Git repository"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        while current_dir != '/':
+            if os.path.exists(os.path.join(current_dir, '.git')):
+                return current_dir
+            current_dir = os.path.dirname(current_dir)
+        raise ValueError("Not in a Git repository")
 
     def _run_git_command(self, command):
         """
@@ -40,25 +51,6 @@ class GitHandler:
             print(f"Git command failed: {e.stderr}")
             raise
 
-    def ensure_repo_exists(self, repo_name, remote_url):
-        """
-        Ensure the local repository exists and is properly configured
-        :param repo_name: Name of the repository
-        :param remote_url: URL of the remote repository
-        """
-        if not os.path.exists(self.repo_path):
-            # Clone the repository if it doesn't exist
-            os.makedirs(self.repo_path, exist_ok=True)
-            self._run_git_command(['git', 'clone', remote_url, '.'])
-        else:
-            # Verify remote and update if necessary
-            try:
-                current_remote = self._run_git_command(['git', 'remote', 'get-url', 'origin'])
-                if current_remote != remote_url:
-                    self._run_git_command(['git', 'remote', 'set-url', 'origin', remote_url])
-            except subprocess.CalledProcessError:
-                self._run_git_command(['git', 'remote', 'add', 'origin', remote_url])
-
     def save_message_to_file(self, message_content, message_id):
         """
         Save a message to a file in the repository
@@ -71,7 +63,7 @@ class GitHandler:
         os.makedirs(messages_dir, exist_ok=True)
 
         # Create filename with timestamp and message ID
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{message_id}.json"
         file_path = os.path.join(messages_dir, filename)
 
@@ -79,7 +71,7 @@ class GitHandler:
         message_data = {
             'id': message_id,
             'content': message_content,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
         
         with open(file_path, 'w') as f:
@@ -94,6 +86,12 @@ class GitHandler:
         :param message_id: Message ID for the commit message
         :return: Commit hash
         """
+        # Pull latest changes first
+        try:
+            self._run_git_command(['git', 'pull', '--rebase', 'origin', 'main'])
+        except subprocess.CalledProcessError:
+            print("Warning: Could not pull latest changes")
+
         # Stage the file
         self._run_git_command(['git', 'add', file_path])
 
@@ -101,8 +99,9 @@ class GitHandler:
         commit_message = f"Add message {message_id}"
         self._run_git_command(['git', 'commit', '-m', commit_message])
 
-        # Push to remote
-        self._run_git_command(['git', 'push', 'origin', 'main'])
+        # Push to remote with token authentication
+        push_url = f"https://x-access-token:{self.github_token}@github.com/gulkily/simplechat.git"
+        self._run_git_command(['git', 'push', push_url, 'main'])
 
         # Get commit hash
         commit_hash = self._run_git_command(['git', 'rev-parse', 'HEAD'])
