@@ -1,4 +1,4 @@
-How to build simplechat with Windsurf
+# How to build simplechat with Windsurf
 
 We are building a Git-backed web-based messaging application with a simple backend using Python, SQLite, and GitHub APIs, along with a basic HTML/CSS/JavaScript frontend. Please help us. Use incremental development and provide all necessary code snippets step by step. Avoid using frameworks. Thank you for your help. We will provide incremental steps one by one. Please start with the README file.
 
