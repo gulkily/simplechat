@@ -204,5 +204,96 @@ class TestChatApp(unittest.TestCase):
                 messages[i + 1]["timestamp"]
             )
 
+    def test_get_messages_pagination(self):
+        """Test message pagination"""
+        # Create 15 test messages
+        test_messages = [
+            {"content": f"Test message {i}"} for i in range(15)
+        ]
+        
+        # Post all messages
+        headers = {"Content-Type": "application/json"}
+        for message in test_messages:
+            self.conn.request(
+                "POST",
+                "/messages",
+                body=json.dumps(message),
+                headers=headers
+            )
+            response = self.conn.getresponse()
+            response.read()  # Clear the response
+        
+        # Test default pagination (limit=100)
+        self.conn.request("GET", "/messages")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 200)
+        response_data = json.loads(response.read().decode())
+        self.assertEqual(len(response_data["messages"]), 15)
+        
+        # Test custom limit
+        self.conn.request("GET", "/messages?limit=5")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 200)
+        response_data = json.loads(response.read().decode())
+        self.assertEqual(len(response_data["messages"]), 5)
+        
+        # Test offset
+        self.conn.request("GET", "/messages?limit=5&offset=5")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 200)
+        response_data = json.loads(response.read().decode())
+        self.assertEqual(len(response_data["messages"]), 5)
+        
+        # Verify message order (newest first)
+        messages = response_data["messages"]
+        for i in range(len(messages) - 1):
+            self.assertGreater(
+                messages[i]["timestamp"],
+                messages[i + 1]["timestamp"]
+            )
+
+    def test_get_messages_invalid_params(self):
+        """Test invalid parameters for GET /messages"""
+        # Test invalid limit
+        self.conn.request("GET", "/messages?limit=invalid")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 400)
+        response.read()  # Clear the response
+        
+        # Test invalid offset
+        self.conn.request("GET", "/messages?offset=invalid")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 400)
+        response.read()  # Clear the response
+        
+        # Test negative limit
+        self.conn.request("GET", "/messages?limit=-1")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 400)
+        response.read()  # Clear the response
+        
+        # Test negative offset
+        self.conn.request("GET", "/messages?offset=-1")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 400)
+        response.read()  # Clear the response
+
+    def test_get_messages_empty_db(self):
+        """Test getting messages from empty database"""
+        # Clear database
+        with sqlite3.connect(self.test_db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM messages")
+            conn.commit()
+        
+        # Get messages
+        self.conn.request("GET", "/messages")
+        response = self.conn.getresponse()
+        self.assertEqual(response.status, 200)
+        response_data = json.loads(response.read().decode())
+        self.assertEqual(len(response_data["messages"]), 0)
+        self.assertIn("messages", response_data)
+        self.assertEqual(response_data["messages"], [])
+
 if __name__ == "__main__":
     unittest.main()

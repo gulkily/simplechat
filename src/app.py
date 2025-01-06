@@ -54,7 +54,29 @@ class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif parsed_path.path == "/messages":
             # Return messages from database
             try:
-                messages = self.db_manager.get_messages()
+                # Parse query parameters
+                query = parse_qs(parsed_path.query)
+                
+                # Get and validate limit parameter
+                try:
+                    limit = int(query.get('limit', [100])[0])
+                    if limit < 0:
+                        raise ValueError("Limit must be non-negative")
+                except ValueError:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid limit parameter")
+                    return
+                
+                # Get and validate offset parameter
+                try:
+                    offset = int(query.get('offset', [0])[0])
+                    if offset < 0:
+                        raise ValueError("Offset must be non-negative")
+                except ValueError:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid offset parameter")
+                    return
+                
+                # Get messages with pagination
+                messages = self.db_manager.get_messages(limit=limit, offset=offset)
                 self.send_json_response({"messages": messages})
             except Exception as e:
                 self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
