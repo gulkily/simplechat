@@ -7,6 +7,7 @@ import signal
 import sqlite3
 import psutil
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -113,6 +114,53 @@ def get_stats(args):
         if 'conn' in locals():
             conn.close()
 
+def setup_env(args):
+    """Set up the environment configuration"""
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    env_template = os.path.join(root_dir, '.env.template')
+    env_file = os.path.join(root_dir, '.env')
+
+    if os.path.exists(env_file):
+        if not args.force:
+            print("Error: .env file already exists. Use --force to overwrite.")
+            return
+        print("Warning: Overwriting existing .env file.")
+
+    # If no template exists, create one
+    if not os.path.exists(env_template):
+        print("Error: .env.template file not found.")
+        return
+
+    # Copy template to .env if it doesn't exist or force is used
+    shutil.copy2(env_template, env_file)
+    print("\nCreated .env file from template.")
+    
+    # Get GitHub token from user if provided
+    if args.token:
+        with open(env_file, 'r') as f:
+            content = f.read()
+        content = content.replace('your_github_token_here', args.token)
+        with open(env_file, 'w') as f:
+            f.write(content)
+        print("Updated GitHub token in .env file.")
+    
+    # Get repository info from user if provided
+    if args.repo:
+        with open(env_file, 'r') as f:
+            content = f.read()
+        content = content.replace('your_username/your_repo', args.repo)
+        with open(env_file, 'w') as f:
+            f.write(content)
+        print("Updated GitHub repository in .env file.")
+
+    print("\nNext steps:")
+    if not args.token:
+        print("1. Edit .env file and add your GitHub token")
+    if not args.repo:
+        print("2. Edit .env file and add your GitHub repository (username/repo)")
+    print("\nTo get a GitHub token, visit: https://github.com/settings/tokens")
+    print("Required scopes: repo")
+
 def main():
     parser = argparse.ArgumentParser(description='SimpleChat CLI')
     subparsers = parser.add_subparsers(dest='command', help='Commands')
@@ -128,6 +176,13 @@ def main():
     # Stats command
     stats_parser = subparsers.add_parser('stats', help='Show chat statistics')
     stats_parser.set_defaults(func=get_stats)
+
+    # Setup command
+    setup_parser = subparsers.add_parser('setup', help='Set up environment configuration')
+    setup_parser.add_argument('--force', action='store_true', help='Force overwrite existing .env file')
+    setup_parser.add_argument('--token', help='GitHub personal access token')
+    setup_parser.add_argument('--repo', help='GitHub repository (format: username/repo)')
+    setup_parser.set_defaults(func=setup_env)
 
     args = parser.parse_args()
     
