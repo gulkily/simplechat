@@ -1,0 +1,48 @@
+.message {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 8px;
+    background-color: #f0f0f0;
+}
+
+.message-content {
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.message-timestamp {
+    font-size: 12px;
+    color: #666;
+}
+
+#messageInput {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+#sendButton {
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+#sendButton:hover {
+    background-color: #0056b3;
+}
+
+#messages {
+    margin-top: 20px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}

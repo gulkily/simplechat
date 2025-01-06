@@ -79,14 +79,17 @@ class GitHubAPI:
             
             # Parse response
             commits = []
-            for commit_data in response.json():
-                commit = commit_data["commit"]
+            commit_data_list = response.json()
+            if not isinstance(commit_data_list, list):
+                raise ValueError("Invalid response format from GitHub API")
+                
+            for commit_data in commit_data_list:
                 commits.append(CommitInfo(
                     sha=commit_data["sha"],
-                    message=commit["message"],
-                    author_name=commit["author"]["name"],
-                    author_email=commit["author"]["email"],
-                    timestamp=commit["author"]["date"],
+                    message=commit_data["commit"]["message"],
+                    author_name=commit_data["commit"]["author"]["name"],
+                    author_email=commit_data["commit"]["author"]["email"],
+                    timestamp=commit_data["commit"]["author"]["date"],
                     url=commit_data["html_url"]
                 ))
             

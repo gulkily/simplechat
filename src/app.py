@@ -11,6 +11,10 @@ try:
 except ImportError:
     from urlparse import parse_qs, urlparse
 from http import HTTPStatus
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import our custom modules
 from database import DatabaseManager
@@ -26,10 +30,7 @@ class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
     """Custom request handler for the chat application"""
     
     def __init__(self, *args, **kwargs):
-        # Initialize parent class first
-        super().__init__(*args, **kwargs)
-        
-        # Initialize database manager
+        # Initialize database manager first
         self.db_manager = DatabaseManager()
         
         # Initialize git handler
@@ -39,23 +40,18 @@ class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.git_handler = None
             print("Warning: GITHUB_TOKEN not set. Git functionality will be disabled.")
+        
+        # Initialize parent class last
+        super().__init__(*args, **kwargs)
 
     def do_GET(self):
         """Handle GET requests"""
-        parsed_path = urlparse(self.path)
-        
-        if parsed_path.path == "/":
-            # Serve the main page
+        if self.path == '/':
             self.serve_file("templates/index.html", "text/html")
-        elif parsed_path.path.startswith("/static/"):
-            # Serve static files (CSS, JS)
-            relative_path = parsed_path.path[8:]  # Remove '/static/' prefix
-            self.serve_static_file(relative_path)
-        elif parsed_path.path == "/messages":
-            # Return messages from database
+        elif self.path == '/messages':
             try:
                 # Parse query parameters
-                query = parse_qs(parsed_path.query)
+                query = parse_qs(urlparse(self.path).query)
                 
                 # Get and validate limit parameter
                 try:
@@ -80,15 +76,22 @@ class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response({"messages": messages})
             except Exception as e:
                 self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
+        elif self.path.startswith('/static/'):
+            # Serve static files
+            file_path = self.path[1:]  # Remove leading slash
+            if file_path.endswith('.js'):
+                content_type = 'application/javascript'
+            elif file_path.endswith('.css'):
+                content_type = 'text/css'
+            else:
+                content_type = 'text/plain'
+            self.serve_file(file_path, content_type)
         else:
-            # Handle 404
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
 
     def do_POST(self):
         """Handle POST requests"""
-        parsed_path = urlparse(self.path)
-        
-        if parsed_path.path == "/messages":
+        if self.path == "/messages":
             try:
                 # Get the length of the request body
                 content_length = int(self.headers.get('Content-Length', 0))
@@ -146,39 +149,17 @@ class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
 
-    def serve_file(self, relative_path, content_type):
-        """Serve a file with the specified content type"""
+    def serve_file(self, file_path, content_type):
+        """Helper method to send a file"""
         try:
-            file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), relative_path)
+            file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), file_path)
             with open(file_path, 'rb') as f:
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", content_type)
-                self.end_headers()
-                self.wfile.write(f.read())
-        except FileNotFoundError:
-            self.send_error(HTTPStatus.NOT_FOUND, "File not found")
-
-    def serve_static_file(self, relative_path):
-        """Serve static files with appropriate content types"""
-        content_types = {
-            '.css': 'text/css',
-            '.js': 'application/javascript',
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif'
-        }
-        
-        file_ext = os.path.splitext(relative_path)[1]
-        content_type = content_types.get(file_ext, 'application/octet-stream')
-        
-        try:
-            file_path = os.path.join(STATIC_DIR, relative_path)
-            with open(file_path, 'rb') as f:
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", content_type)
-                self.end_headers()
-                self.wfile.write(f.read())
+                content = f.read()
+            self.send_response(HTTPStatus.OK)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
         except FileNotFoundError:
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
 

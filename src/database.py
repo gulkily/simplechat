@@ -23,7 +23,7 @@ class DatabaseManager:
         self._init_db()
 
     @contextmanager
-    def get_connection(self):
+    def _get_connection(self):
         """Get a database connection with proper cleanup"""
         conn = sqlite3.connect(self.db_path)
         try:
@@ -32,15 +32,15 @@ class DatabaseManager:
             conn.close()
 
     def _init_db(self):
-        """Initialize database schema"""
-        with self.get_connection() as conn:
+        """Initialize database tables if they don't exist"""
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS messages (
                     id TEXT PRIMARY KEY,
                     content TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
-                    git_commit_hash TEXT
+                    git_commit_hash TEXT DEFAULT NULL
                 )
             ''')
             conn.commit()
@@ -53,7 +53,7 @@ class DatabaseManager:
         :param message_id: Message ID (UUID)
         :return: Message ID
         """
-        with self.get_connection() as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 'INSERT INTO messages (id, content, timestamp) VALUES (?, ?, ?)',
@@ -69,7 +69,7 @@ class DatabaseManager:
         :param offset: Offset for pagination
         :return: List of messages
         """
-        with self.get_connection() as conn:
+        with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
@@ -94,7 +94,7 @@ class DatabaseManager:
         :param message_id: Message ID
         :param commit_hash: Git commit hash
         """
-        with self.get_connection() as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 'UPDATE messages SET git_commit_hash = ? WHERE id = ?',
@@ -108,7 +108,7 @@ class DatabaseManager:
         :param message_id: Message ID
         :return: Message data or None if not found
         """
-        with self.get_connection() as conn:
+        with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''

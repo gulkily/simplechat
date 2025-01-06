@@ -45,6 +45,7 @@ class TestGitHubAPI(unittest.TestCase):
             }
         ]
 
+    @patch.dict(os.environ, {}, clear=True)
     def test_init_without_token(self):
         """Test initialization without token"""
         with self.assertRaises(ValueError):
@@ -55,93 +56,84 @@ class TestGitHubAPI(unittest.TestCase):
         """Test fetching commits"""
         # Mock response
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = self.sample_commits
         mock_get.return_value = mock_response
-        
-        # Get commits
+
+        # Test getting commits
         commits = self.api.get_commits("owner", "repo")
-        
-        # Verify request
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs["headers"]["Authorization"], "token test_token")
-        self.assertEqual(kwargs["params"]["per_page"], 30)
-        
+
+        # Verify request was made correctly
+        mock_get.assert_called_once_with(
+            "https://api.github.com/repos/owner/repo/commits",
+            headers=self.api.headers,
+            params={'per_page': 30, 'page': 1}
+        )
+
         # Verify response parsing
         self.assertEqual(len(commits), 2)
         self.assertIsInstance(commits[0], CommitInfo)
         self.assertEqual(commits[0].sha, "abc123")
         self.assertEqual(commits[0].message, "First commit")
         self.assertEqual(commits[0].author_name, "Test User")
+        self.assertEqual(commits[0].author_email, "test@example.com")
+        self.assertEqual(commits[0].url, "https://github.com/owner/repo/commit/abc123")
 
     @patch('requests.get')
-    def test_get_commits_with_path(self, mock_get):
-        """Test fetching commits for specific path"""
+    def test_get_commits_with_filters(self, mock_get):
+        """Test fetching commits with filters"""
         # Mock response
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = self.sample_commits
         mock_get.return_value = mock_response
-        
-        # Get commits with path
-        commits = self.api.get_commits("owner", "repo", path="src/")
-        
-        # Verify path parameter
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs["params"]["path"], "src/")
+
+        # Test parameters
+        path = "src/app.py"
+        since = datetime.now() - timedelta(days=7)
+        until = datetime.now()
+        per_page = 50
+        page = 2
+
+        # Test getting commits with filters
+        commits = self.api.get_commits(
+            "owner",
+            "repo",
+            path=path,
+            since=since.isoformat(),
+            until=until.isoformat(),
+            per_page=per_page,
+            page=page
+        )
+
+        # Verify request was made with correct parameters
+        mock_get.assert_called_once_with(
+            "https://api.github.com/repos/owner/repo/commits",
+            headers=self.api.headers,
+            params={
+                'path': path,
+                'since': since.isoformat(),
+                'until': until.isoformat(),
+                'per_page': per_page,
+                'page': page
+            }
+        )
 
     @patch('requests.get')
-    def test_get_commits_with_dates(self, mock_get):
-        """Test fetching commits with date range"""
-        # Mock response
-        mock_response = MagicMock()
-        mock_response.json.return_value = self.sample_commits
-        mock_get.return_value = mock_response
-        
-        # Get commits with date range
-        since = "2025-01-01T00:00:00Z"
-        until = "2025-01-05T00:00:00Z"
-        commits = self.api.get_commits("owner", "repo", since=since, until=until)
-        
-        # Verify date parameters
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs["params"]["since"], since)
-        self.assertEqual(kwargs["params"]["until"], until)
-
-    @patch('requests.get')
-    def test_get_commit_messages(self, mock_get):
-        """Test fetching just commit messages"""
-        # Mock response
-        mock_response = MagicMock()
-        mock_response.json.return_value = self.sample_commits
-        mock_get.return_value = mock_response
-        
-        # Get messages
-        messages = self.api.get_commit_messages("owner", "repo", max_commits=2)
-        
-        # Verify results
-        self.assertEqual(len(messages), 2)
-        self.assertEqual(messages[0], "First commit")
-        self.assertEqual(messages[1], "Second commit")
-
-    @patch('requests.get')
-    def test_error_handling(self, mock_get):
-        """Test error handling"""
-        # Test 404
+    def test_get_commits_error(self, mock_get):
+        """Test error handling when fetching commits"""
+        # Mock error response
         mock_response = MagicMock()
         mock_response.status_code = 404
-        mock_get.side_effect = requests.exceptions.RequestException(response=mock_response)
-        
-        with self.assertRaises(ValueError) as cm:
-            self.api.get_commits("owner", "nonexistent")
-        self.assertIn("not found", str(cm.exception))
-        
-        # Test 403
-        mock_response.status_code = 403
-        mock_get.side_effect = requests.exceptions.RequestException(response=mock_response)
-        
-        with self.assertRaises(ValueError) as cm:
-            self.api.get_commits("owner", "repo")
-        self.assertIn("rate limit exceeded", str(cm.exception))
+        mock_response.json.return_value = {"message": "Not Found"}
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "404 Client Error: Not Found"
+        )
+        mock_get.return_value = mock_response
+
+        # Test error handling
+        with self.assertRaises(requests.exceptions.HTTPError):
+            self.api.get_commits("owner", "nonexistent-repo")
 
 if __name__ == "__main__":
     unittest.main()

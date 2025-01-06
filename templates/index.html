@@ -10,21 +10,225 @@
             max-width: 800px;
             margin: 20px auto;
             padding: 0 20px;
+            background-color: #f5f5f5;
         }
+        
         h1 {
             color: #333;
             text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        #chat-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        #messages {
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        
+        .message {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        
+        .message .content {
+            margin-bottom: 5px;
+        }
+        
+        .message .metadata {
+            font-size: 0.8em;
+            color: #666;
+        }
+        
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        #send-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+        
+        #send-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+            display: none;
         }
     </style>
 </head>
 <body>
-    <h1>Welcome to SimpleChat</h1>
-    <p>The server is running successfully!</p>
-    <p>Current timestamp: <span id="timestamp"></span></p>
+    <h1>SimpleChat</h1>
+    
+    <div id="chat-container">
+        <div id="messages">
+            <!-- Messages will be inserted here -->
+        </div>
+        
+        <div id="input-container">
+            <input type="text" id="message-input" placeholder="Type your message..." maxlength="1000">
+            <button id="send-button">Send</button>
+        </div>
+        
+        <div id="error" class="error"></div>
+    </div>
 
     <script>
-        // Display current timestamp
-        document.getElementById('timestamp').textContent = new Date().toISOString();
+        // DOM elements
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const errorDiv = document.getElementById('error');
+        
+        // Function to format timestamp
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+        
+        // Function to create message element
+        function createMessageElement(message) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            
+            const content = document.createElement('div');
+            content.className = 'content';
+            content.textContent = message.content;
+            
+            const metadata = document.createElement('div');
+            metadata.className = 'metadata';
+            metadata.textContent = `${formatTimestamp(message.timestamp)}`;
+            
+            if (message.git_commit_hash) {
+                const link = document.createElement('a');
+                link.href = `https://github.com/owner/repo/commit/${message.git_commit_hash}`;
+                link.textContent = ` (${message.git_commit_hash.substring(0, 7)})`;
+                link.target = '_blank';
+                metadata.appendChild(link);
+            }
+            
+            div.appendChild(content);
+            div.appendChild(metadata);
+            return div;
+        }
+        
+        // Function to load messages
+        async function loadMessages() {
+            try {
+                const response = await fetch('/messages');
+                if (!response.ok) throw new Error('Failed to load messages');
+                
+                const data = await response.json();
+                messagesContainer.innerHTML = '';
+                
+                data.messages.forEach(message => {
+                    messagesContainer.appendChild(createMessageElement(message));
+                });
+                
+                // Scroll to bottom
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                
+            } catch (error) {
+                showError('Failed to load messages. Please try again later.');
+            }
+        }
+        
+        // Function to send message
+        async function sendMessage(content) {
+            try {
+                const response = await fetch('/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error);
+                }
+                
+                // Clear input and reload messages
+                messageInput.value = '';
+                await loadMessages();
+                
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+        
+        // Function to show error
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Event listeners
+        sendButton.addEventListener('click', () => {
+            const content = messageInput.value.trim();
+            if (content) {
+                sendMessage(content);
+            }
+        });
+        
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const content = messageInput.value.trim();
+                if (content) {
+                    sendMessage(content);
+                }
+            }
+        });
+        
+        messageInput.addEventListener('input', () => {
+            sendButton.disabled = !messageInput.value.trim();
+        });
+        
+        // Initial load
+        loadMessages();
+        
+        // Periodic refresh
+        setInterval(loadMessages, 10000);
     </script>
 </body>
 </html>
