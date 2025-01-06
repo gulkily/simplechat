@@ -4,11 +4,17 @@ import http.server
 import socketserver
 import json
 import os
+import uuid
+from datetime import datetime, timezone
 try:
     from urllib.parse import parse_qs, urlparse
 except ImportError:
     from urlparse import parse_qs, urlparse
 from http import HTTPStatus
+
+# Import our custom modules
+from database import DatabaseManager
+from git_handler import GitHandler
 
 # Constants
 HOST = "localhost"
@@ -18,6 +24,21 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templat
 
 class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
     """Custom request handler for the chat application"""
+    
+    def __init__(self, *args, **kwargs):
+        # Initialize parent class first
+        super().__init__(*args, **kwargs)
+        
+        # Initialize database manager
+        self.db_manager = DatabaseManager()
+        
+        # Initialize git handler
+        github_token = os.environ.get('GITHUB_TOKEN')
+        if github_token:
+            self.git_handler = GitHandler(github_token)
+        else:
+            self.git_handler = None
+            print("Warning: GITHUB_TOKEN not set. Git functionality will be disabled.")
 
     def do_GET(self):
         """Handle GET requests"""
@@ -31,8 +52,12 @@ class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
             relative_path = parsed_path.path[8:]  # Remove '/static/' prefix
             self.serve_static_file(relative_path)
         elif parsed_path.path == "/messages":
-            # Return messages (will implement later)
-            self.send_json_response({"messages": []})
+            # Return messages from database
+            try:
+                messages = self.db_manager.get_messages()
+                self.send_json_response({"messages": messages})
+            except Exception as e:
+                self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
         else:
             # Handle 404
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
@@ -42,19 +67,60 @@ class ChatRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         
         if parsed_path.path == "/messages":
-            # Get the length of the request body
-            content_length = int(self.headers.get('Content-Length', 0))
-            # Read the request body
-            post_data = self.rfile.read(content_length)
-            
             try:
+                # Get the length of the request body
+                content_length = int(self.headers.get('Content-Length', 0))
+                # Read the request body
+                post_data = self.rfile.read(content_length)
+                
                 # Parse the JSON data
                 message_data = json.loads(post_data.decode('utf-8'))
-                # Will implement message handling later
-                response_data = {"status": "success", "message": "Message received"}
+                
+                # Validate message content
+                if 'content' not in message_data:
+                    raise ValueError("Message content is required")
+                
+                # Generate message ID and timestamp
+                message_id = str(uuid.uuid4())
+                timestamp = datetime.now(timezone.utc).isoformat()
+                
+                # Save to database
+                self.db_manager.add_message(
+                    message_data['content'],
+                    timestamp,
+                    message_id
+                )
+                
+                # Save to Git if enabled
+                git_commit_hash = None
+                if self.git_handler:
+                    try:
+                        git_commit_hash = self.git_handler.store_message(
+                            message_data['content'],
+                            message_id
+                        )
+                        # Update git commit hash in database
+                        self.db_manager.update_git_commit_hash(message_id, git_commit_hash)
+                    except Exception as e:
+                        print(f"Warning: Failed to store message in Git: {str(e)}")
+                
+                # Prepare response
+                response_data = {
+                    "status": "success",
+                    "message": "Message saved",
+                    "id": message_id,
+                    "timestamp": timestamp,
+                    "git_commit_hash": git_commit_hash
+                }
+                
                 self.send_json_response(response_data)
+                
             except json.JSONDecodeError:
                 self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON data")
+            except ValueError as e:
+                self.send_error(HTTPStatus.BAD_REQUEST, str(e))
+            except Exception as e:
+                self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
 

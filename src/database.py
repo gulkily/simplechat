@@ -3,6 +3,7 @@
 import sqlite3
 import os
 from datetime import datetime
+from contextlib import contextmanager
 import json
 
 # Database configuration
@@ -11,101 +12,119 @@ DB_PATH = os.path.join(DB_DIR, "chat.db")
 
 class DatabaseManager:
     def __init__(self, db_path=DB_PATH):
-        """Initialize database manager with the database path"""
+        """Initialize database connection"""
+        if db_path is None:
+            db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "messages.db")
+        
+        # Ensure data directory exists
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
         self.db_path = db_path
-        self._ensure_db_directory()
-        self.init_db()
+        self._init_db()
 
-    def _ensure_db_directory(self):
-        """Ensure the database directory exists"""
-        db_dir = os.path.dirname(self.db_path)
-        if not os.path.exists(db_dir):
-            os.makedirs(db_dir)
+    @contextmanager
+    def get_connection(self):
+        """Get a database connection with proper cleanup"""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            yield conn
+        finally:
+            conn.close()
 
-    def init_db(self):
-        """Initialize the database and create the messages table if it doesn't exist"""
-        with sqlite3.connect(self.db_path) as conn:
+    def _init_db(self):
+        """Initialize database schema"""
+        with self.get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Create messages table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id TEXT PRIMARY KEY,
                     content TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
                     git_commit_hash TEXT
                 )
             ''')
-            
-            # Create index on timestamp for faster querying
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_timestamp 
-                ON messages(timestamp)
-            ''')
-            
             conn.commit()
 
-    def add_message(self, content, timestamp=None):
+    def add_message(self, content, timestamp, message_id):
         """
         Add a new message to the database
-        Returns the ID of the inserted message
+        :param content: Message content
+        :param timestamp: Message timestamp (ISO format)
+        :param message_id: Message ID (UUID)
+        :return: Message ID
         """
-        if timestamp is None:
-            timestamp = datetime.utcnow().isoformat()
-
-        with sqlite3.connect(self.db_path) as conn:
+        with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO messages (content, timestamp)
-                VALUES (?, ?)
-            ''', (content, timestamp))
+            cursor.execute(
+                'INSERT INTO messages (id, content, timestamp) VALUES (?, ?, ?)',
+                (message_id, content, timestamp)
+            )
             conn.commit()
-            return cursor.lastrowid
+            return message_id
 
     def get_messages(self, limit=100, offset=0):
         """
-        Retrieve messages from the database, ordered by timestamp
-        Returns a list of dictionaries containing message data
+        Get messages from the database
+        :param limit: Maximum number of messages to return
+        :param offset: Offset for pagination
+        :return: List of messages
         """
-        with sqlite3.connect(self.db_path) as conn:
-            # Configure connection to return dictionaries
+        with self.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
             cursor.execute('''
                 SELECT id, content, timestamp, git_commit_hash
                 FROM messages
                 ORDER BY timestamp DESC
                 LIMIT ? OFFSET ?
             ''', (limit, offset))
-            
-            return [dict(row) for row in cursor.fetchall()]
+            messages = []
+            for row in cursor.fetchall():
+                messages.append({
+                    'id': row['id'],
+                    'content': row['content'],
+                    'timestamp': row['timestamp'],
+                    'git_commit_hash': row['git_commit_hash']
+                })
+            return messages
 
     def update_git_commit_hash(self, message_id, commit_hash):
-        """Update the git commit hash for a message"""
-        with sqlite3.connect(self.db_path) as conn:
+        """
+        Update the Git commit hash for a message
+        :param message_id: Message ID
+        :param commit_hash: Git commit hash
+        """
+        with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE messages
-                SET git_commit_hash = ?
-                WHERE id = ?
-            ''', (commit_hash, message_id))
+            cursor.execute(
+                'UPDATE messages SET git_commit_hash = ? WHERE id = ?',
+                (commit_hash, message_id)
+            )
             conn.commit()
 
     def get_message_by_id(self, message_id):
-        """Retrieve a specific message by its ID"""
-        with sqlite3.connect(self.db_path) as conn:
+        """
+        Get a message by its ID
+        :param message_id: Message ID
+        :return: Message data or None if not found
+        """
+        with self.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
             cursor.execute('''
                 SELECT id, content, timestamp, git_commit_hash
                 FROM messages
                 WHERE id = ?
             ''', (message_id,))
-            
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if row:
+                return {
+                    'id': row['id'],
+                    'content': row['content'],
+                    'timestamp': row['timestamp'],
+                    'git_commit_hash': row['git_commit_hash']
+                }
+            return None
 
 def init_database():
     """Initialize the database with the schema"""
