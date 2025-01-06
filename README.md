@@ -77,6 +77,38 @@ python src/app.py
 
 7. Open your browser and navigate to `http://localhost:8000`
 
+## Command Line Interface
+
+SimpleChat comes with a command-line utility to manage the server and view statistics. Here are the available commands:
+
+### Starting the Server
+```bash
+./simplechat start
+```
+
+### Stopping the Server
+```bash
+./simplechat stop
+```
+
+### Viewing Statistics
+```bash
+./simplechat stats
+```
+
+This will show you:
+- Server status (running/stopped)
+- Total number of messages
+- Messages in the last 24 hours
+- Timestamp of first and last messages
+- Number of message files
+- Total storage size used
+
+### Getting Help
+```bash
+./simplechat --help
+```
+
 ## Security Notes
 
 - Never commit your GitHub token to the repository
