@@ -389,6 +389,68 @@ def setup_env(args):
         print("\nTo get a GitHub token, visit: https://github.com/settings/tokens")
         print("Required scopes: repo")
 
+def show_help(args):
+    """Show detailed help information about commands"""
+    commands = {
+        'start': {
+            'description': 'Start the chat server',
+            'usage': 'simplechat start',
+            'example': 'simplechat start'
+        },
+        'stop': {
+            'description': 'Stop the running chat server',
+            'usage': 'simplechat stop',
+            'example': 'simplechat stop'
+        },
+        'stats': {
+            'description': 'Display statistics about the chat application, including message counts and storage information',
+            'usage': 'simplechat stats',
+            'example': 'simplechat stats'
+        },
+        'setup': {
+            'description': 'Configure the environment with GitHub credentials and repository information',
+            'usage': 'simplechat setup [--force] [--token TOKEN] [--repo USERNAME/REPO]',
+            'example': 'simplechat setup --token ghp_xxxx --repo username/repo'
+        },
+        'push': {
+            'description': 'Push local changes to the configured GitHub repository',
+            'usage': 'simplechat push [-m MESSAGE] [-a] [-f]',
+            'example': 'simplechat push -m "Added new messages" -a'
+        },
+        'pull': {
+            'description': 'Pull and display messages from configured repositories',
+            'usage': 'simplechat pull [--include-main] [--limit N]',
+            'example': 'simplechat pull --include-main --limit 20'
+        },
+        'repos': {
+            'description': 'Manage the list of repositories for message synchronization',
+            'usage': 'simplechat repos [--list] [--add REPO] [--remove REPO] [--set-main REPO]',
+            'example': 'simplechat repos --add username/repo'
+        },
+        'help': {
+            'description': 'Show detailed help information about commands',
+            'usage': 'simplechat help [COMMAND]',
+            'example': 'simplechat help start'
+        }
+    }
+
+    if args.command_name:
+        if args.command_name in commands:
+            cmd = commands[args.command_name]
+            print(f"\nCommand: {args.command_name}")
+            print(f"Description: {cmd['description']}")
+            print(f"Usage: {cmd['usage']}")
+            print(f"Example: {cmd['example']}")
+        else:
+            print(f"Error: Unknown command '{args.command_name}'")
+            print("Use 'simplechat help' to see all available commands")
+    else:
+        print("\nSimpleChat - A simple chat application with GitHub integration")
+        print("\nAvailable commands:")
+        for cmd_name, cmd_info in commands.items():
+            print(f"\n  {cmd_name}")
+            print(f"    {cmd_info['description']}")
+
 def main():
     parser = argparse.ArgumentParser(description='SimpleChat CLI')
     subparsers = parser.add_subparsers(dest='command', help='Commands')
@@ -432,6 +494,11 @@ def main():
     repos_parser.add_argument('--remove', metavar='REPO', help='Remove a repository')
     repos_parser.add_argument('--set-main', metavar='REPO', help='Set main repository for pushing')
     repos_parser.set_defaults(func=manage_repos)
+
+    # Help command
+    help_parser = subparsers.add_parser('help', help='Show detailed help information')
+    help_parser.add_argument('command_name', nargs='?', help='Show help for specific command')
+    help_parser.set_defaults(func=show_help)
 
     args = parser.parse_args()
     
