@@ -114,6 +114,74 @@ def get_stats(args):
         if 'conn' in locals():
             conn.close()
 
+def load_env():
+    """Load environment variables from .env file"""
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    env_file = os.path.join(root_dir, '.env')
+    
+    if not os.path.exists(env_file):
+        print("Error: .env file not found. Run 'simplechat setup' first.")
+        sys.exit(1)
+        
+    # Load environment variables
+    from dotenv import load_dotenv
+    load_dotenv(env_file)
+    
+    # Check required variables
+    required_vars = ['GITHUB_TOKEN', 'GITHUB_REPO']
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    if missing_vars:
+        print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
+        print("Run 'simplechat setup' to configure your environment.")
+        sys.exit(1)
+
+def push_changes(args):
+    """Push changes to GitHub"""
+    load_env()
+    
+    github_token = os.getenv('GITHUB_TOKEN')
+    github_repo = os.getenv('GITHUB_REPO')
+    
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    
+    try:
+        # Check if we're in a git repository
+        os.chdir(root_dir)
+        if not os.path.exists('.git'):
+            print("Error: Not a git repository")
+            return
+        
+        # Add all changes
+        if args.all:
+            print("Adding all changes...")
+            os.system('git add .')
+        
+        # Check if there are changes to commit
+        status = os.popen('git status --porcelain').read().strip()
+        if not status and not args.force:
+            print("No changes to push")
+            return
+        
+        # Commit changes if requested
+        if args.message:
+            print(f"Committing changes with message: {args.message}")
+            os.system(f'git commit -m "{args.message}"')
+        elif status:
+            print("Warning: There are uncommitted changes. Use --message to commit them.")
+        
+        # Push to GitHub
+        print("Pushing to GitHub...")
+        remote_url = f'https://x-access-token:{github_token}@github.com/{github_repo}.git'
+        result = os.system(f'git push {remote_url} main')
+        
+        if result == 0:
+            print("Successfully pushed changes to GitHub")
+        else:
+            print("Error: Failed to push changes")
+            
+    except Exception as e:
+        print(f"Error pushing changes: {e}")
+
 def setup_env(args):
     """Set up the environment configuration"""
     root_dir = os.path.dirname(os.path.dirname(__file__))
@@ -183,6 +251,13 @@ def main():
     setup_parser.add_argument('--token', help='GitHub personal access token')
     setup_parser.add_argument('--repo', help='GitHub repository (format: username/repo)')
     setup_parser.set_defaults(func=setup_env)
+
+    # Push command
+    push_parser = subparsers.add_parser('push', help='Push changes to GitHub')
+    push_parser.add_argument('-m', '--message', help='Commit message')
+    push_parser.add_argument('-a', '--all', action='store_true', help='Add all changes before pushing')
+    push_parser.add_argument('-f', '--force', action='store_true', help='Push even if there are no changes')
+    push_parser.set_defaults(func=push_changes)
 
     args = parser.parse_args()
     

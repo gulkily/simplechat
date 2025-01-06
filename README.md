@@ -138,6 +138,21 @@ This will show you:
 - Number of message files
 - Total storage size used
 
+### Pushing Changes to GitHub
+```bash
+# Push existing commits
+./simplechat push
+
+# Add all changes and commit with a message
+./simplechat push -a -m "Your commit message"
+
+# Just add all changes (without committing)
+./simplechat push -a
+
+# Force push even if there are no changes
+./simplechat push -f
+```
+
 ### Getting Help
 ```bash
 ./simplechat --help
