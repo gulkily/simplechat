@@ -10,6 +10,8 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
+import importlib.util
+import subprocess
 
 def find_server_pid():
     """Find the PID of the running simplechat server"""
@@ -23,8 +25,70 @@ def find_server_pid():
             continue
     return None
 
+def install_dependencies():
+    """Install missing dependencies using pip"""
+    requirements_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'requirements.txt')
+    if not os.path.exists(requirements_file):
+        print("Error: requirements.txt not found")
+        return False
+    
+    try:
+        print("Installing dependencies...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
+        print("Dependencies installed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing dependencies: {e}")
+        print("Try running manually with: pip install -r requirements.txt")
+        return False
+
+def check_dependencies(auto_install=False):
+    """Check if all required dependencies are installed"""
+    required_packages = {
+        'github': 'PyGithub',
+        'dotenv': 'python-dotenv',
+        'sqlite3': 'sqlite3-api',
+        'requests': 'requests',
+        'psutil': 'psutil'
+    }
+    
+    missing_packages = []
+    for module, package in required_packages.items():
+        if importlib.util.find_spec(module) is None:
+            missing_packages.append(package)
+    
+    if missing_packages:
+        if auto_install:
+            print("Missing dependencies detected. Attempting to install...")
+            if install_dependencies():
+                # Verify installation
+                still_missing = []
+                for module, package in required_packages.items():
+                    if importlib.util.find_spec(module) is None:
+                        still_missing.append(package)
+                if still_missing:
+                    print("\nError: Some dependencies are still missing after installation:")
+                    print("Please install them manually:")
+                    print("\npip install " + " ".join(still_missing))
+                    return False
+                return True
+            return False
+        else:
+            print("Error: Missing required dependencies")
+            print("Please install the following packages:")
+            print("\npip install " + " ".join(missing_packages))
+            print("\nOr install all dependencies with:")
+            print("pip install -r requirements.txt")
+            print("\nAlternatively, run with --auto-install to install dependencies automatically")
+            return False
+    return True
+
 def start_server(args):
     """Start the simplechat server"""
+    # Check dependencies before starting
+    if not check_dependencies(args.auto_install):
+        return
+
     pid = find_server_pid()
     if pid:
         print(f"Server is already running (PID: {pid})")
@@ -41,6 +105,8 @@ def start_server(args):
         print("Server started successfully")
     except Exception as e:
         print(f"Error starting server: {e}")
+        print("\nTip: If you're seeing import errors, make sure all dependencies are installed:")
+        print("pip install -r requirements.txt")
 
 def stop_server(args):
     """Stop the simplechat server"""
@@ -395,8 +461,8 @@ def show_help(args):
     commands = {
         'start': {
             'description': 'Start the chat server',
-            'usage': 'simplechat start',
-            'example': 'simplechat start'
+            'usage': 'simplechat start [--auto-install]',
+            'example': 'simplechat start --auto-install'
         },
         'stop': {
             'description': 'Stop the running chat server',
@@ -458,6 +524,7 @@ def main():
 
     # Start command
     start_parser = subparsers.add_parser('start', help='Start the chat server')
+    start_parser.add_argument('--auto-install', action='store_true', help='Automatically install missing dependencies')
     start_parser.set_defaults(func=start_server)
 
     # Stop command
