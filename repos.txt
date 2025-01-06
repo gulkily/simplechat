@@ -1,0 +1,14 @@
+# SimpleChat Repository List
+# Add one repository per line in the format: username/repository
+# Lines starting with # are comments and will be ignored
+# Empty lines are also ignored
+
+# Your main repository (do not remove)
+
+# Add other repositories to pull from below:
+# example1/chat-app
+# example2/messaging
+
+gulkily/simplechat
+gulkily/bananachat
+gulkily/gityap

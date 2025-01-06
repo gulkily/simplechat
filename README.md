@@ -138,6 +138,52 @@ This will show you:
 - Number of message files
 - Total storage size used
 
+### Managing Repositories
+SimpleChat uses a `repos.txt` file to manage repositories. The first non-comment line is your main repository (used for pushing), and subsequent lines are repositories to pull from.
+
+You can manage repositories using the CLI:
+```bash
+# List all configured repositories
+./simplechat repos --list
+
+# Add a repository to pull from
+./simplechat repos --add username/repo
+
+# Remove a repository
+./simplechat repos --remove username/repo
+
+# Set your main repository (for pushing)
+./simplechat repos --set-main username/repo
+```
+
+You can also edit `repos.txt` directly. It supports comments (lines starting with #) and empty lines for better organization:
+```bash
+# Main repository
+username/main-repo
+
+# Team repositories
+teammate1/chat-app
+teammate2/chat-app
+
+# Community repositories
+community1/chat
+community2/chat
+# ...more repositories...
+```
+
+### Pulling Messages
+Pull messages from configured repositories:
+```bash
+# Pull from all repositories (except main)
+./simplechat pull
+
+# Include messages from main repository
+./simplechat pull --include-main
+
+# Show more messages (default is 10)
+./simplechat pull --limit 20
+```
+
 ### Pushing Changes to GitHub
 ```bash
 # Push existing commits
