@@ -42,45 +42,52 @@ class MessagePuller:
         if not os.path.exists(messages_dir):
             return messages
 
-        # Look for both .json and .txt files
-        for file_path in Path(messages_dir).glob('*.*'):
-            if file_path.suffix not in ['.json', '.txt']:
-                continue
+        # Walk through messages directory and its subdirectories
+        for root, _, files in os.walk(messages_dir):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                rel_path = os.path.relpath(file_path, messages_dir)
                 
-            try:
-                with open(file_path, 'r') as f:
-                    if file_path.suffix == '.json':
-                        # Parse JSON format
-                        data = json.load(f)
-                        if isinstance(data, dict):
-                            # Our format
-                            if 'content' in data and 'timestamp' in data:
+                if not file_name.endswith(('.json', '.txt')):
+                    continue
+                    
+                try:
+                    with open(file_path, 'r') as f:
+                        if file_name.endswith('.json'):
+                            # Parse JSON format
+                            data = json.load(f)
+                            if isinstance(data, dict):
+                                # Our format
+                                if 'content' in data and 'timestamp' in data:
+                                    messages.append({
+                                        'content': data['content'],
+                                        'timestamp': data['timestamp'],
+                                        'source_repo': os.path.basename(repo_dir),
+                                        'path': rel_path
+                                    })
+                                # Other possible JSON formats
+                                elif 'message' in data:
+                                    messages.append({
+                                        'content': data['message'],
+                                        'timestamp': data.get('time', data.get('date', datetime.now().isoformat())),
+                                        'source_repo': os.path.basename(repo_dir),
+                                        'path': rel_path
+                                    })
+                        else:
+                            # Handle text files
+                            content = f.read().strip()
+                            if content:
+                                # Use file modification time as timestamp
+                                timestamp = datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
                                 messages.append({
-                                    'content': data['content'],
-                                    'timestamp': data['timestamp'],
-                                    'source_repo': os.path.basename(repo_dir)
+                                    'content': content,
+                                    'timestamp': timestamp,
+                                    'source_repo': os.path.basename(repo_dir),
+                                    'path': rel_path
                                 })
-                            # Other possible JSON formats
-                            elif 'message' in data:
-                                messages.append({
-                                    'content': data['message'],
-                                    'timestamp': data.get('time', data.get('date', datetime.now().isoformat())),
-                                    'source_repo': os.path.basename(repo_dir)
-                                })
-                    else:
-                        # Handle text files
-                        content = f.read().strip()
-                        if content:
-                            # Use file modification time as timestamp
-                            timestamp = datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
-                            messages.append({
-                                'content': content,
-                                'timestamp': timestamp,
-                                'source_repo': os.path.basename(repo_dir)
-                            })
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Failed to read message file {file_path}: {e}")
-                continue
+                except (json.JSONDecodeError, IOError) as e:
+                    print(f"Warning: Failed to read message file {file_path}: {e}")
+                    continue
 
         return messages
 

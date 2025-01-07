@@ -86,22 +86,32 @@ class GitHandler:
         :param message_id: Message ID for the commit message
         :return: Commit hash
         """
-        # Pull latest changes first
-        try:
-            self._run_git_command(['git', 'pull', '--rebase', 'origin', 'main'])
-        except subprocess.CalledProcessError:
-            print("Warning: Could not pull latest changes")
-
-        # Stage the file
+        # Stage the file first
         self._run_git_command(['git', 'add', file_path])
 
         # Create commit
         commit_message = f"Add message {message_id}"
         self._run_git_command(['git', 'commit', '-m', commit_message])
 
+        # Pull latest changes with rebase
+        try:
+            self._run_git_command(['git', 'pull', '--rebase', 'origin', 'main'])
+        except subprocess.CalledProcessError:
+            # If rebase fails, try to abort it and do a regular pull
+            try:
+                self._run_git_command(['git', 'rebase', '--abort'])
+                self._run_git_command(['git', 'pull', 'origin', 'main'])
+            except subprocess.CalledProcessError:
+                print("Warning: Could not pull latest changes")
+
         # Push to remote with token authentication
         push_url = f"https://x-access-token:{self.github_token}@github.com/gulkily/simplechat.git"
-        self._run_git_command(['git', 'push', push_url, 'main'])
+        try:
+            self._run_git_command(['git', 'push', push_url, 'main'])
+        except subprocess.CalledProcessError:
+            # If push fails, try to force push
+            print("Warning: Push failed, trying force push...")
+            self._run_git_command(['git', 'push', '-f', push_url, 'main'])
 
         # Get commit hash
         commit_hash = self._run_git_command(['git', 'rev-parse', 'HEAD'])

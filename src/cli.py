@@ -318,6 +318,7 @@ def pull_messages(args):
         
         for msg in messages[:args.limit]:
             print(f"\nFrom: {msg['source_repo']}")
+            print(f"Path: messages/{msg['path']}")
             print(f"Time: {msg['timestamp']}")
             print(f"Message: {msg['content']}")
             print("-" * 50)
